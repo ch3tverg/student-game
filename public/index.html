@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Платформа Тестирования</title>
+    <style>
+        :root { --primary: #4F46E5; --success: #10B981; --danger: #EF4444; --bg: #F3F4F6; --card-bg: #FFFFFF; --text: #1F2937; }
+        body { font-family: 'Segoe UI', Roboto, sans-serif; background-color: var(--bg); color: var(--text); margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .container { width: 100%; max-width: 500px; background: var(--card-bg); padding: 2rem; border-radius: 1rem; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); box-sizing: border-box; margin: 1rem; }
+        .screen { display: none; } .screen.active { display: block; animation: fadeIn 0.3s; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        h1, h2, h3 { text-align: center; color: var(--primary); margin-top: 0; }
+        input { width: 100%; padding: 0.75rem; margin-bottom: 1rem; border: 1px solid #D1D5DB; border-radius: 0.5rem; box-sizing: border-box; font-size: 1rem; }
+        button { width: 100%; padding: 0.75rem; border: none; border-radius: 0.5rem; background-color: var(--primary); color: white; font-size: 1rem; font-weight: bold; cursor: pointer; transition: all 0.2s; margin-bottom: 0.5rem; }
+        button:hover:not(:disabled) { filter: brightness(1.1); }
+        button:disabled { opacity: 0.6; cursor: not-allowed; }
+        .error { color: var(--danger); text-align: center; display: none; margin-bottom: 1rem; font-weight: bold; }
+        .success { color: var(--success); text-align: center; display: none; margin-bottom: 1rem; font-weight: bold; }
+        .toggle-auth { text-align: center; color: var(--primary); cursor: pointer; font-size: 0.9rem; text-decoration: underline; margin-top: 1rem; }
+        .leaderboard { background: var(--bg); padding: 1rem; border-radius: 0.5rem; margin-bottom: 1.5rem; max-height: 150px; overflow-y: auto;}
+        .leaderboard-item { display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid #E5E7EB; }
+        .leaderboard-item:last-child { border-bottom: none; }
+        .progress-bar-bg { width: 100%; background: #E5E7EB; border-radius: 999px; height: 8px; margin-bottom: 1.5rem; overflow: hidden;}
+        .progress-bar-fill { height: 100%; background: var(--primary); width: 0%; transition: width 0.3s ease; }
+        .option-btn { background-color: #F9FAFB; color: var(--text); border: 2px solid #E5E7EB; text-align: left; }
+        .controls { display: flex; gap: 1rem; margin-top: 1.5rem; }
+        .btn-finish { background-color: #6B7280; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    
+    <div id="auth-screen" class="screen active">
+        <h1 id="auth-title">Вход</h1>
+        <div id="auth-msg" class="error"></div>
+        
+        <input type="text" id="username" placeholder="Никнейм" required>
+        <input type="password" id="password" placeholder="Пароль" required>
+        
+        <input type="password" id="password-confirm" placeholder="Подтвердите пароль" style="display: none;">
+        
+        <button id="auth-btn" onclick="submitAuth()">Войти</button>
+        <div class="toggle-auth" onclick="toggleAuthMode()">У меня нет аккаунта (Регистрация)</div>
+    </div>
+
+    <div id="dashboard-screen" class="screen">
+        <h2 id="welcome-text">Привет!</h2>
+        <h3>🏆 Рейтинг</h3>
+        <div class="leaderboard" id="leaderboard-list">Ожидание данных...</div>
+        <h3>Предметы:</h3>
+        <button onclick="startQuiz('microeconomics')">Микроэкономика</button>
+        <button onclick="startQuiz('macroeconomics')">Макроэкономика</button>
+        <button onclick="startQuiz('marketing')">Маркетинг</button>
+    </div>
+
+    <div id="quiz-screen" class="screen">
+        <div class="progress-bar-bg"><div class="progress-bar-fill" id="progress"></div></div>
+        <h3 id="question-text">Вопрос загружается...</h3>
+        <div id="options"></div>
+        <div class="controls">
+            <button id="next-btn" disabled onclick="nextQuestion()">Далее</button>
+            <button class="btn-finish" onclick="finishQuiz()">Завершить</button>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    let currentUser = ''; let questions = []; let currentQIndex = 0; let sessionScore = 0;
+    let isLoginMode = true;
+
+    function showScreen(screenId) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.getElementById(screenId).classList.add('active');
+    }
+
+    function showMessage(text, isError = true) {
+        const msgBox = document.getElementById('auth-msg');
+        msgBox.innerText = text;
+        msgBox.className = isError ? 'error' : 'success';
+        msgBox.style.display = 'block';
+    }
+
+    function toggleAuthMode() {
+        isLoginMode = !isLoginMode;
+        document.getElementById('auth-msg').style.display = 'none';
+        document.getElementById('auth-title').innerText = isLoginMode ? 'Вход' : 'Регистрация';
+        document.getElementById('auth-btn').innerText = isLoginMode ? 'Войти' : 'Зарегистрироваться';
+        document.getElementById('password-confirm').style.display = isLoginMode ? 'none' : 'block';
+        document.querySelector('.toggle-auth').innerText = isLoginMode ? 'У меня нет аккаунта (Регистрация)' : 'У меня уже есть аккаунт (Вход)';
+    }
+
+    async function submitAuth() {
+        const user = document.getElementById('username').value.trim();
+        const pass = document.getElementById('password').value.trim();
+        
+        if (!user || !pass) return showMessage("Заполните все поля!");
+
+        if (!isLoginMode) {
+            const passConfirm = document.getElementById('password-confirm').value.trim();
+            if (pass.length < 4) return showMessage("Пароль должен быть не менее 4 символов!");
+            if (pass !== passConfirm) return showMessage("Пароли не совпадают!");
+        }
+
+        const endpoint = isLoginMode ? '/api/login' : '/api/register';
+        const btn = document.getElementById('auth-btn');
+        btn.disabled = true;
+        btn.innerText = "Ожидание...";
+
+        try {
+            const res = await fetch(endpoint, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username: user, password: pass})
+            });
+            const data = await res.json();
+            
+            if (!res.ok) {
+                showMessage(data.error || "Произошла ошибка");
+            } else {
+                if (!isLoginMode) {
+                    showMessage("Регистрация успешна! Теперь войдите.", false);
+                    setTimeout(toggleAuthMode, 1500);
+                } else {
+                    currentUser = data.username;
+                    document.getElementById('welcome-text').innerText = `Студент: ${currentUser}`;
+                    loadLeaderboard();
+                    showScreen('dashboard-screen');
+                }
+            }
+        } catch (e) { showMessage("Ошибка сервера"); } 
+        finally {
+            btn.disabled = false;
+            btn.innerText = isLoginMode ? "Войти" : "Зарегистрироваться";
+        }
+    }
+
+    // Остальной код (рейтинг и логика тестов) остался неизменным
+    async function loadLeaderboard() {
+        const res = await fetch('/api/leaderboard'); const data = await res.json();
+        document.getElementById('leaderboard-list').innerHTML = data.length === 0 ? '<div style="text-align: center;">Пусто</div>' : data.map((u, i) => `<div class="leaderboard-item"><span><b>${i+1}.</b> ${u.username}</span><span style="color: var(--primary); font-weight: bold;">${u.score}</span></div>`).join('');
+    }
+
+    async function startQuiz(subject) {
+        showScreen('quiz-screen'); sessionScore = 0; currentQIndex = 0;
+        const res = await fetch(`/api/questions/${subject}`); questions = await res.json();
+        if (questions.length === 0) { alert("Вопросов нет"); showScreen('dashboard-screen'); return; }
+        renderQuestion();
+    }
+
+    function renderQuestion() {
+        const q = questions[currentQIndex];
+        document.getElementById('question-text').innerText = `${currentQIndex + 1}. ${q.text}`;
+        document.getElementById('progress').style.width = `${(currentQIndex / questions.length) * 100}%`;
+        const container = document.getElementById('options'); container.innerHTML = '';
+        document.getElementById('next-btn').disabled = true;
+        q.options.forEach(opt => {
+            const btn = document.createElement('button'); btn.className = 'option-btn'; btn.innerText = opt;
+            btn.onclick = () => selectAnswer(btn, opt, q.correct); container.appendChild(btn);
+        });
+    }
+
+    function selectAnswer(btn, selected, correct) {
+        document.querySelectorAll('.option-btn').forEach(b => b.disabled = true);
+        if (selected === correct) { btn.style.backgroundColor = 'var(--success)'; btn.style.color = 'white'; sessionScore++; } 
+        else { btn.style.backgroundColor = 'var(--danger)'; btn.style.color = 'white';
+            document.querySelectorAll('.option-btn').forEach(b => { if(b.innerText === correct) { b.style.backgroundColor = 'var(--success)'; b.style.color = 'white'; }});
+        }
+        document.getElementById('next-btn').disabled = false;
+    }
+
+    function nextQuestion() { currentQIndex++; currentQIndex < questions.length ? renderQuestion() : finishQuiz(); }
+
+    async function finishQuiz() {
+        await fetch('/api/score', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({username: currentUser, points: sessionScore}) });
+        alert(`Результат: ${sessionScore} из ${questions.length}`); loadLeaderboard(); showScreen('dashboard-screen');
+    }
+</script>
+</body>
+</html>
